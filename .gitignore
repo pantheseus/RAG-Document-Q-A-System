@@ -1,0 +1,22 @@
+# Environment variables
+backend/.env
+
+# Python compilation cache
+**/__pycache__/
+*.pyc
+
+# Local vector database
+backend/chroma_db/
+
+# Temporary upload directories
+backend/temp_uploads/
+temp_uploads/
+
+# IDE configurations
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp

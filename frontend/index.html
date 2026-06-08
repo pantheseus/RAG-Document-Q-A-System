@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DocuQuery - Premium RAG Q&A</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="favicon.png">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Marked.js for Markdown Parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Highlight.js for Code Syntax Highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+</head>
+<body>
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+    </div>
+
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-brand-wrapper">
+                    <h2><i class="fa-solid fa-layer-group"></i> DocuQuery</h2>
+                    <button id="sidebarClose" class="sidebar-close-btn" aria-label="Close Sidebar">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <p>Multi-Agent Document Analysis</p>
+            </div>
+
+            <button id="btnNewChat" class="btn-clear" style="margin-top: 0; margin-bottom: 1.5rem; background: var(--text-primary); color: var(--bg-main); border: none;">
+                <i class="fa-solid fa-plus"></i> New Chat
+            </button>
+
+            <!-- Upload Area -->
+            <div class="upload-area" id="uploadArea">
+                <input type="file" id="fileInput" accept=".pdf,.txt" hidden>
+                <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
+                <h3>Upload Document</h3>
+                <span class="file-types">Supports PDF, TXT</span>
+            </div>
+
+            <!-- Recent Chats List -->
+            <div style="margin-top: 1rem; flex-grow: 1; display: flex; flex-direction: column; overflow: hidden;">
+                <h3 style="font-size: 0.8rem; color: var(--text-tertiary); text-transform: uppercase; margin-bottom: 0.5rem; letter-spacing: 0.05em;">Recent Chats</h3>
+                <div class="document-list" id="sessionList">
+                    <!-- Session items will go here -->
+                </div>
+            </div>
+            
+            <button id="btnClearDB" class="btn-clear" style="margin-top: auto;">
+                <i class="fa-solid fa-trash"></i> Wipe Database
+            </button>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="chat-container">
+            <header class="chat-header">
+                <div class="chat-header-left">
+                    <button id="sidebarToggle" class="sidebar-toggle-btn" aria-label="Toggle Sidebar">
+                        <i class="fa-solid fa-bars"></i>
+                    </button>
+                    <div>
+                        <h2>Chat with your Data</h2>
+                        <p class="status-indicator"><span class="dot"></span> Cloud Multi-Agent Active (Groq)</p>
+                    </div>
+                </div>
+                <div class="export-menu-wrapper">
+                    <button class="export-btn" id="exportBtn" title="Export chat">
+                        <i class="fa-solid fa-arrow-up-from-bracket"></i> Export
+                    </button>
+                    <div class="export-dropdown" id="exportDropdown">
+                        <button onclick="exportAsMarkdown()">
+                            <i class="fa-brands fa-markdown"></i> Export as Markdown
+                        </button>
+                        <button onclick="exportAsPDF()">
+                            <i class="fa-regular fa-file-pdf"></i> Export as PDF
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <div class="chat-messages" id="chatMessages">
+                <div class="message system-message">
+                    <div class="message-avatar"><i class="fa-solid fa-robot"></i></div>
+                    <div class="message-content">
+                        Hello! Upload a document on the left, and ask me anything about it. I run locally and privately.
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-input-area">
+                <form id="chatForm">
+                    <div class="input-wrapper">
+                        <input type="text" id="chatInput" placeholder="Ask a question about your document..." autocomplete="off">
+                        <button type="submit" id="sendBtn"><i class="fa-solid fa-paper-plane"></i></button>
+                    </div>
+                </form>
+            </div>
+        </main>
+    </div>
+
+    <!-- Backdrop for mobile sidebar drawer -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+    <!-- jsPDF for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
