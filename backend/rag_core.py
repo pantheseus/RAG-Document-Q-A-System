@@ -1,43 +1,43 @@
 import os
 import shutil
+import json
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
-from langchain_community.llms import Ollama
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import HumanMessage, AIMessage
+from agents import create_multi_agent_system
 
 # Directories
-CHROMA_PATH = "chroma_db"
-TEMP_UPLOADS_DIR = "temp_uploads"
-
-# Embeddings (Runs locally, completely free)
-embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CHROMA_PATH = os.path.join(BASE_DIR, "chroma_db")
+TEMP_UPLOADS_DIR = os.path.join(BASE_DIR, "temp_uploads")
 
 # Global variables
-vector_store = None
-chat_history = []
+_embeddings = None
+_vector_store = None
 
-def init_db():
-    global vector_store
-    if os.path.exists(CHROMA_PATH):
-        vector_store = Chroma(persist_directory=CHROMA_PATH, embedding_function=embeddings)
-    else:
-        # Create an empty collection initially if it doesn't exist
-        vector_store = Chroma(persist_directory=CHROMA_PATH, embedding_function=embeddings)
+def get_embeddings():
+    global _embeddings
+    if _embeddings is None:
+        _embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    return _embeddings
 
-init_db()
+def get_vector_store():
+    global _vector_store
+    if _vector_store is None:
+        embeds = get_embeddings()
+        _vector_store = Chroma(persist_directory=CHROMA_PATH, embedding_function=embeds)
+    return _vector_store
 
-def process_and_add_document(file_path: str, session_id: str):
-    """Phase 1 & 2: Ingest document, split, embed, and tag with session_id."""
-    global vector_store
+def process_and_add_document(file_path: str, session_id: str, owner_id: str = "guest"):
+    """Phase 1 & 2: Ingest document, split, embed, and tag with session_id and owner_id."""
+    vstore = get_vector_store()
     
     # 1. Load document
     if file_path.endswith('.pdf'):
         loader = PyPDFLoader(file_path)
     elif file_path.endswith('.txt'):
-        loader = TextLoader(file_path)
+        loader = TextLoader(file_path, autodetect_encoding=True)
     else:
         raise ValueError("Unsupported file format")
         
@@ -56,35 +56,27 @@ def process_and_add_document(file_path: str, session_id: str):
         return {"status": "error", "message": "No text found in document."}
         
     for chunk in chunks:
-        # Preserve existing metadata but inject the session_id
-        chunk.metadata["session_id"] = session_id
+        chunk.metadata["session_id"] = str(session_id)
+        chunk.metadata["owner_id"] = str(owner_id)
         
-    vector_store.add_documents(chunks)
+    vstore.add_documents(chunks)
     
     return {"status": "success", "message": f"Successfully processed {len(chunks)} chunks for session {session_id}."}
 
-def clear_database():
-    """Clears the existing vector database."""
-    global vector_store, chat_history
-    if vector_store:
+def clear_session_vectors(session_id: str):
+    """Clears the vectors for a specific session."""
+    vstore = get_vector_store()
+    if vstore:
         try:
-            vector_store.delete_collection()
+            vstore._collection.delete(where={"session_id": str(session_id)})
         except Exception as e:
-            print(f"Error dropping collection: {e}")
-            
-    # Re-initialize to create a fresh collection
-    init_db()
-    chat_history = []
-    
-from agents import create_multi_agent_system
+            print(f"Error dropping documents for session {session_id}: {e}")
 
-import json
-
-async def get_answer_stream(query: str, session_id: str):
+async def get_answer_stream(query: str, session_id: str, owner_id: str = "guest"):
     """Phase 3 & 4: Retrieve context and stream answer tokens via astream_events."""
-    global vector_store
+    vstore = get_vector_store()
     
-    if not vector_store:
+    if not vstore:
         yield json.dumps({"error": "Please upload a document first."}) + "\n"
         return
         
@@ -92,12 +84,14 @@ async def get_answer_stream(query: str, session_id: str):
         yield json.dumps({"error": "Please set your GROQ_API_KEY environment variable (or in .env) to use the Multi-Agent system."}) + "\n"
         return
         
-    # Phase 3: Setup Retriever WITH Session Filter
-    retriever = vector_store.as_retriever(
+    # Phase 3: Setup Retriever WITH Session & Owner Filter
+    filter_dict = {"$and": [{"session_id": str(session_id)}, {"owner_id": str(owner_id)}]}
+    
+    retriever = vstore.as_retriever(
         search_type="similarity", 
         search_kwargs={
             "k": 4,
-            "filter": {"session_id": session_id}
+            "filter": filter_dict
         }
     )
     

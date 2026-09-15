@@ -10,3 +10,9 @@ pypdf
 python-multipart
 langgraph
 langchain-groq
+sqlalchemy
+psycopg2-binary
+pyjwt
+passlib
+bcrypt
+email-validator

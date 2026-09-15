@@ -17,7 +17,7 @@ def create_multi_agent_system(retriever):
     Requires GROQ_API_KEY environment variable to be set.
     """
     # Initialize the Groq LLM (Smarter model for deep reasoning)
-    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1)
+    llm = ChatGroq(model="groq/compound", temperature=0.1)
 
     # ==========================================
     # AGENT 1: The Researcher
@@ -38,11 +38,15 @@ def create_multi_agent_system(retriever):
             source_file = doc.metadata.get("source", "Unknown")
             # Get just the filename instead of the full path
             filename = os.path.basename(source_file)
-            page = doc.metadata.get("page", "")
+            page = doc.metadata.get("page")
             
             citation = filename
-            if page or page == 0:
-                citation += f" (Page {page + 1})" # PyPDFLoader is 0-indexed
+            if page is not None and page != "":
+                try:
+                    page_num = int(page) + 1 # PyPDFLoader is 0-indexed
+                    citation += f" (Page {page_num})"
+                except (ValueError, TypeError):
+                    citation += f" (Page {page})"
                 
             if citation not in sources_list:
                 sources_list.append(citation)
