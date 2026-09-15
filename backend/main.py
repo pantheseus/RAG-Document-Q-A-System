@@ -1,4 +1,11 @@
 import os
+import sys
+
+# Ensure backend directory is in Python path for cloud deployments (Render, Railway, Docker)
+BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+if BACKEND_DIR not in sys.path:
+    sys.path.insert(0, BACKEND_DIR)
+
 import shutil
 from typing import Optional, List
 from dotenv import load_dotenv
