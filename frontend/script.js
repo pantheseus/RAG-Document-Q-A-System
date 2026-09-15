@@ -8,6 +8,8 @@ const chatMessages = document.getElementById('chatMessages');
 const sendBtn = document.getElementById('sendBtn');
 const userSection = document.getElementById('userSection');
 const authCloseBtn = document.getElementById('authCloseBtn');
+const activeChatTitle = document.getElementById('activeChatTitle');
+const uploadProgress = document.getElementById('uploadProgress');
 
 // Responsive Sidebar elements
 const sidebar = document.getElementById('sidebar');
@@ -64,6 +66,24 @@ window.switchAuthTab = function(tab) {
     }
 };
 
+// Toast Notifications Helper
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.innerHTML = `
+        <i class="fa-solid ${type === 'success' ? 'fa-circle-check' : 'fa-triangle-exclamation'}"></i>
+        <span>${escapeHTML(message)}</span>
+    `;
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(20px)';
+        setTimeout(() => toast.remove(), 250);
+    }, 3500);
+}
+
 // Global Auth Header helper
 function getAuthHeaders(isJson = true) {
     const headers = {};
@@ -72,7 +92,7 @@ function getAuthHeaders(isJson = true) {
     return headers;
 }
 
-// Initialize application
+// Initialize Application
 async function init() {
     if (authToken) {
         await fetchCurrentUser();
@@ -86,6 +106,7 @@ function showMandatoryAuth() {
     currentSessionId = null;
     if (userSection) userSection.innerHTML = '';
     if (sessionList) sessionList.innerHTML = '';
+    renderEmptyHeroState();
     window.openAuthModal('login', true);
 }
 
@@ -127,14 +148,7 @@ function logout() {
     authToken = null;
     currentUser = null;
     currentSessionId = null;
-    if (chatMessages) {
-        chatMessages.innerHTML = `
-            <div class="message system-message">
-                <div class="message-avatar"><i class="fa-solid fa-robot"></i></div>
-                <div class="message-content">Welcome to DocuQuery! Please sign in to access your workspace.</div>
-            </div>
-        `;
-    }
+    showToast("Signed out successfully", "success");
     showMandatoryAuth();
 }
 
@@ -165,17 +179,13 @@ function renderSessionList(sessions) {
     sessionList.innerHTML = '';
     sessions.forEach(sess => {
         const item = document.createElement('div');
-        item.className = 'document-item';
-        if (sess.id === currentSessionId) {
-            item.style.backgroundColor = 'var(--border-hover)';
-        }
-
+        item.className = `document-item ${sess.id === currentSessionId ? 'active' : ''}`;
         item.innerHTML = `
-            <i class="fa-regular fa-message" style="flex-shrink:0; color: var(--text-secondary);"></i>
+            <i class="fa-regular fa-message" style="flex-shrink:0;"></i>
             <span class="session-name" onclick="loadSession('${sess.id}')" title="${escapeHTML(sess.name)}">
                 ${escapeHTML(sess.name)}
             </span>
-            <button class="session-delete-btn" onclick="event.stopPropagation(); deleteSession('${sess.id}')" title="Delete chat">
+            <button class="session-delete-btn" onclick="event.stopPropagation(); deleteSession('${sess.id}')" title="Delete conversation">
                 <i class="fa-solid fa-trash"></i>
             </button>
         `;
@@ -193,7 +203,7 @@ async function createNewSession() {
         const res = await fetch(`${API_BASE}/sessions`, {
             method: 'POST',
             headers: getAuthHeaders(true),
-            body: JSON.stringify({ name: 'New Chat' })
+            body: JSON.stringify({ name: 'New Conversation' })
         });
         if (res.ok) {
             const newSess = await res.json();
@@ -217,13 +227,13 @@ async function loadSession(id) {
         if (res.ok) {
             const msgs = await res.json();
             if (msgs.length === 0) {
-                appendSystemMessage("Hello! Upload a document to this chat, and ask me anything about it.", false);
+                renderEmptyHeroState();
             } else {
                 msgs.forEach(msg => {
                     if (msg.role === 'user') {
-                        appendUserMessage(msg.content, false);
+                        appendUserMessage(msg.content);
                     } else {
-                        appendSystemMessage(msg.content, false, msg.sources);
+                        appendSystemMessage(msg.content, msg.sources);
                     }
                 });
             }
@@ -231,19 +241,27 @@ async function loadSession(id) {
     } catch (e) {
         console.error("Error loading messages:", e);
     }
-    await fetchUserSessions();
+    
+    // Update active chat header title
+    const sessItem = document.querySelector(`.document-item.active .session-name`);
+    if (sessItem && activeChatTitle) {
+        activeChatTitle.textContent = sessItem.textContent.trim();
+    } else if (activeChatTitle) {
+        activeChatTitle.textContent = "Document Workspace";
+    }
 
     if (window.innerWidth <= 768) closeSidebarDrawer();
 }
 
 async function deleteSession(id) {
-    if (!confirm('Are you sure you want to delete this chat?')) return;
+    if (!confirm('Are you sure you want to delete this conversation?')) return;
     try {
         const res = await fetch(`${API_BASE}/sessions/${id}`, {
             method: 'DELETE',
             headers: getAuthHeaders(false)
         });
         if (res.ok) {
+            showToast("Conversation deleted", "success");
             currentSessionId = null;
             await fetchUserSessions();
         }
@@ -253,6 +271,45 @@ async function deleteSession(id) {
 }
 
 if (btnNewChat) btnNewChat.addEventListener('click', createNewSession);
+
+// --- Empty Hero State Renderer ---
+function renderEmptyHeroState() {
+    if (!chatMessages) return;
+    chatMessages.innerHTML = `
+        <div class="empty-hero-container">
+            <div class="empty-hero-icon">
+                <i class="fa-solid fa-cube"></i>
+            </div>
+            <h2>Document Knowledge Assistant</h2>
+            <p>Upload a PDF or TXT file to extract information, query data points, or synthesize key findings.</p>
+            
+            <div class="empty-hero-cards">
+                <div class="hero-card" onclick="triggerSampleQuery('Summarize the main points of the uploaded document.')">
+                    <i class="fa-solid fa-align-left"></i>
+                    <h4>Summarize Content</h4>
+                    <p>Get a concise executive overview of key takeaways.</p>
+                </div>
+                <div class="hero-card" onclick="triggerSampleQuery('List the key requirements and metrics mentioned.')">
+                    <i class="fa-solid fa-list-check"></i>
+                    <h4>Key Requirements</h4>
+                    <p>Extract structured criteria and data parameters.</p>
+                </div>
+                <div class="hero-card" onclick="triggerSampleQuery('What are the core conclusions of this document?')">
+                    <i class="fa-solid fa-lightbulb"></i>
+                    <h4>Core Conclusions</h4>
+                    <p>Identify core findings and recommendations.</p>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+window.triggerSampleQuery = function(queryText) {
+    if (chatInput) {
+        chatInput.value = queryText;
+        chatInput.focus();
+    }
+};
 
 // --- Form Listeners ---
 if (loginForm) {
@@ -276,10 +333,11 @@ if (loginForm) {
                 currentUser = data.user;
                 window.closeAuthModal();
                 renderLoggedInState();
+                showToast(`Welcome back, ${currentUser.username}!`, "success");
                 await fetchUserSessions();
             } else {
                 if (loginError) {
-                    loginError.textContent = data.detail || 'Login failed.';
+                    loginError.textContent = data.detail || 'Incorrect username or password.';
                     loginError.style.display = 'block';
                 }
             }
@@ -314,6 +372,7 @@ if (registerForm) {
                 currentUser = data.user;
                 window.closeAuthModal();
                 renderLoggedInState();
+                showToast("Account created successfully!", "success");
                 await fetchUserSessions();
             } else {
                 if (registerError) {
@@ -366,7 +425,7 @@ if (fileInput) {
 
 async function handleFileUpload(file) {
     if (!file.name.endsWith('.pdf') && !file.name.endsWith('.txt')) {
-        alert('Only PDF and TXT files are supported.');
+        showToast("Only PDF and TXT files are supported.", "error");
         return;
     }
 
@@ -381,7 +440,7 @@ async function handleFileUpload(file) {
 
     if (window.innerWidth <= 768) closeSidebarDrawer();
 
-    appendSystemMessage(`Uploading and indexing **${file.name}**...`);
+    if (uploadProgress) uploadProgress.classList.remove('hidden');
 
     try {
         const response = await fetch(`${API_BASE}/upload`, {
@@ -393,17 +452,23 @@ async function handleFileUpload(file) {
         const data = await response.json();
         
         if (response.ok) {
-            const successMsg = `Successfully ingested and indexed **${file.name}**. You can now ask questions about it!`;
-            appendSystemMessage(successMsg);
+            showToast(`Indexed document: ${file.name}`, "success");
+            // Clear empty hero state if visible
+            const emptyHero = document.querySelector('.empty-hero-container');
+            if (emptyHero) emptyHero.remove();
+            
+            appendSystemMessage(`Indexed document **${file.name}**. You can now ask questions about its content.`);
         } else {
             throw new Error(data.detail || 'Upload failed');
         }
     } catch (error) {
-        appendSystemMessage(`Error uploading document: ${error.message}`);
+        showToast(`Upload failed: ${error.message}`, "error");
+    } finally {
+        if (uploadProgress) uploadProgress.classList.add('hidden');
     }
 }
 
-// --- Chat Logic ---
+// --- Chat Streaming Logic ---
 if (chatForm) {
     chatForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -415,6 +480,10 @@ if (chatForm) {
         const query = chatInput.value.trim();
         if (!query) return;
 
+        // Clear empty state if present
+        const emptyHero = document.querySelector('.empty-hero-container');
+        if (emptyHero) emptyHero.remove();
+
         appendUserMessage(query);
         chatInput.value = '';
         
@@ -424,9 +493,9 @@ if (chatForm) {
         const msgDiv = document.createElement('div');
         msgDiv.className = 'message system-message';
         msgDiv.innerHTML = `
-            <div class="message-avatar"><i class="fa-solid fa-robot"></i></div>
-            <div class="message-content" style="width: 100%;">
-                <div class="markdown-body"><i class="fa-solid fa-circle-notch fa-spin"></i> Thinking...</div>
+            <div class="message-avatar"><i class="fa-solid fa-cube"></i></div>
+            <div class="message-content">
+                <div class="markdown-body"><i class="fa-solid fa-circle-notch fa-spin"></i> Analyzing...</div>
             </div>
         `;
         chatMessages.appendChild(msgDiv);
@@ -448,7 +517,7 @@ if (chatForm) {
                     showMandatoryAuth();
                     return;
                 }
-                contentDiv.innerHTML = "Sorry, I encountered an error connecting to the server.";
+                contentDiv.innerHTML = "An error occurred connecting to the intelligence engine.";
                 return;
             }
 
@@ -489,7 +558,7 @@ if (chatForm) {
             renderSourcesAndHighlight(msgDiv, contentDiv, finalSources);
 
         } catch (error) {
-            contentDiv.innerHTML = "Failed to connect to the backend.";
+            contentDiv.innerHTML = "Unable to reach backend service.";
         } finally {
             chatInput.disabled = false;
             sendBtn.disabled = false;
@@ -504,21 +573,20 @@ function appendUserMessage(text) {
     const msgDiv = document.createElement('div');
     msgDiv.className = 'message user-message';
     msgDiv.innerHTML = `
-        <div class="message-avatar"><i class="fa-solid fa-user"></i></div>
-        <div class="message-content">${escapeHTML(text)}</div>
+        <div class="message-inner">${escapeHTML(text)}</div>
     `;
     chatMessages.appendChild(msgDiv);
     scrollToBottom();
 }
 
-function appendSystemMessage(text, save = false, sources = []) {
+function appendSystemMessage(text, sources = []) {
     if (!chatMessages) return;
     const msgDiv = document.createElement('div');
     msgDiv.className = 'message system-message';
     
     msgDiv.innerHTML = `
-        <div class="message-avatar"><i class="fa-solid fa-robot"></i></div>
-        <div class="message-content" style="width: 100%;">
+        <div class="message-avatar"><i class="fa-solid fa-cube"></i></div>
+        <div class="message-content">
             <div class="markdown-body">
                 ${typeof marked !== 'undefined' ? marked.parse(text) : escapeHTML(text)}
             </div>
@@ -563,6 +631,103 @@ function escapeHTML(str) {
             '"': '&quot;'
         }[tag] || tag)
     );
+}
+
+// Export Dropdown Logic
+const exportBtn = document.getElementById('exportBtn');
+const exportDropdown = document.getElementById('exportDropdown');
+
+if (exportBtn && exportDropdown) {
+    exportBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        exportDropdown.classList.toggle('open');
+    });
+
+    document.addEventListener('click', () => {
+        exportDropdown.classList.remove('open');
+    });
+}
+
+function exportAsMarkdown() {
+    if (exportDropdown) exportDropdown.classList.remove('open');
+    const messages = chatMessages.querySelectorAll('.message');
+    if (messages.length === 0) {
+        showToast("No messages to export", "error");
+        return;
+    }
+
+    let md = `# Conversation Export - DocuQuery\n`;
+    md += `*Exported on ${new Date().toLocaleString()}*\n\n---\n\n`;
+
+    messages.forEach(msg => {
+        if (msg.classList.contains('user-message')) {
+            const content = msg.querySelector('.message-inner').innerText;
+            md += `## 🧑 User\n${content}\n\n`;
+        } else if (msg.classList.contains('system-message')) {
+            const content = msg.querySelector('.markdown-body').innerText;
+            md += `## 🤖 DocuQuery\n${content}\n\n`;
+        }
+    });
+
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `DocuQuery_Export_${Date.now()}.md`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    showToast("Exported Markdown file", "success");
+}
+
+function exportAsPDF() {
+    if (exportDropdown) exportDropdown.classList.remove('open');
+    if (typeof window.jspdf === 'undefined') {
+        showToast("PDF library loading...", "error");
+        return;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pageW = doc.internal.pageSize.getWidth();
+    const margin = 40;
+    let y = 40;
+
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text("DocuQuery - Conversation Export", margin, y);
+    y += 20;
+
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Exported on ${new Date().toLocaleString()}`, margin, y);
+    y += 25;
+
+    const messages = chatMessages.querySelectorAll('.message');
+    messages.forEach(msg => {
+        const isUser = msg.classList.contains('user-message');
+        const text = isUser 
+            ? msg.querySelector('.message-inner').innerText 
+            : msg.querySelector('.markdown-body').innerText;
+
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(isUser ? 30 : 99, isUser ? 41 : 102, isUser ? 59 : 241);
+        doc.text(isUser ? "User:" : "DocuQuery:", margin, y);
+        y += 15;
+
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(50, 50, 50);
+        const lines = doc.splitTextToSize(text, pageW - margin * 2);
+        lines.forEach(line => {
+            if (y > 780) { doc.addPage(); y = 40; }
+            doc.text(line, margin, y);
+            y += 14;
+        });
+        y += 15;
+    });
+
+    doc.save(`DocuQuery_Export_${Date.now()}.pdf`);
+    showToast("Exported PDF document", "success");
 }
 
 // Drawer listeners

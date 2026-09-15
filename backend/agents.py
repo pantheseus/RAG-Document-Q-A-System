@@ -4,7 +4,7 @@ from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 import os
 
-# Define the state that will be passed between our agents
+# Define the state passed between agents
 class AgentState(TypedDict):
     question: str
     context: str
@@ -16,7 +16,7 @@ def create_multi_agent_system(retriever):
     Creates a Multi-Agent workflow using LangGraph.
     Requires GROQ_API_KEY environment variable to be set.
     """
-    # Initialize the Groq LLM (Smarter model for deep reasoning)
+    # Initialize the Groq LLM
     llm = ChatGroq(model="groq/compound", temperature=0.1)
 
     # ==========================================
@@ -25,7 +25,6 @@ def create_multi_agent_system(retriever):
     async def researcher_node(state: AgentState):
         """The Researcher searches the vector database for relevant information."""
         question = state["question"]
-        print(f"[Agent: Researcher] Searching database for: {question}")
         docs = await retriever.ainvoke(question)
         
         context_parts = []
@@ -34,16 +33,14 @@ def create_multi_agent_system(retriever):
         for doc in docs:
             context_parts.append(doc.page_content)
             
-            # Extract citation metadata
             source_file = doc.metadata.get("source", "Unknown")
-            # Get just the filename instead of the full path
             filename = os.path.basename(source_file)
             page = doc.metadata.get("page")
             
             citation = filename
             if page is not None and page != "":
                 try:
-                    page_num = int(page) + 1 # PyPDFLoader is 0-indexed
+                    page_num = int(page) + 1  # PyPDFLoader is 0-indexed
                     citation += f" (Page {page_num})"
                 except (ValueError, TypeError):
                     citation += f" (Page {page})"
@@ -54,30 +51,25 @@ def create_multi_agent_system(retriever):
         context = "\n\n".join(context_parts)
         
         if not context.strip():
-            context = "No relevant information found in the document."
+            context = "No relevant passages found in the uploaded documents."
             
         return {"context": context, "sources": sources_list}
 
     # ==========================================
-    # AGENT 2: The Editor
+    # AGENT 2: The Executive Analyst / Editor
     # ==========================================
     async def editor_node(state: AgentState):
-        """The Editor takes the raw facts and formats them beautifully."""
-        print("[Agent: Editor] Drafting the final premium response...")
+        """The Analyst synthesizes raw retrieved context into an executive answer."""
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are a highly professional expert Editor and Analyst. "
-                       "The user will ask questions about their uploaded document (PDF/TXT). The contents of their document are provided below as 'Context from Database'. "
-                       "Your job is to answer the user's question accurately using ONLY this context. "
-                       "If they ask a meta-question like 'explain my PDF' or 'summarize the document', treat the provided context as the document and summarize it for them. "
-                       "\n\n"
-                       "LANGUAGE RULE (HIGHEST PRIORITY): Detect the language the user wrote their question in and respond ENTIRELY in that same language. "
-                       "For example: if the user writes in Tamil, respond in Tamil. If in Hindi, respond in Hindi. If in French, respond in French. "
-                       "Never switch languages mid-response. Match the user's language exactly.\n\n"
-                       "FORMATTING RULE: You MUST format your response beautifully using Markdown. "
-                       "Always use bullet points for lists, bold text for key terms, and use headings where appropriate. "
-                       "If your answer contains programming code, you MUST wrap it in triple backticks (```) so it formats line-by-line correctly.\n"
-                       "Before giving your final answer, think deeply step-by-step about the context provided and what the user is asking. "
-                       "Never output a single boring block of text. Break it up with paragraphs, lists, and code blocks."),
+            ("system", "You are an executive Document Intelligence Analyst. "
+                       "The user will ask questions about their uploaded document (PDF/TXT). Relevant passages from their document are provided below under 'Context from Database'. "
+                       "Your objective is to answer the user's question with direct, clear, and professional precision based strictly on the provided context.\n\n"
+                       "CRITICAL OUTPUT RULE: Directly output the final structured response. "
+                       "DO NOT output internal thinking outlines, reasoning steps, chain-of-thought summaries, or headers like 'Reasoning Process'. "
+                       "Begin immediately with the answer.\n\n"
+                       "LANGUAGE RULE: Detect the language of the user's question and respond ENTIRELY in that exact language (e.g. English, Tamil, Hindi, Spanish, French).\n\n"
+                       "FORMATTING RULE: Use clean Markdown. Use bold text for key metrics/terms, organized bullet points for lists, and concise headings. "
+                       "If code or technical commands are included, wrap them in triple-backtick (```) code blocks."),
             ("human", "Context from Database:\n{context}\n\nUser Question: {question}")
         ])
         
@@ -93,15 +85,15 @@ def create_multi_agent_system(retriever):
     # ==========================================
     workflow = StateGraph(AgentState)
     
-    # Add our agents as nodes
+    # Add nodes
     workflow.add_node("researcher", researcher_node)
     workflow.add_node("editor", editor_node)
     
-    # Define the flow: Start -> Researcher -> Editor -> End
+    # Define execution graph: Start -> Researcher -> Editor -> End
     workflow.set_entry_point("researcher")
     workflow.add_edge("researcher", "editor")
     workflow.add_edge("editor", END)
     
-    # Compile the graph
+    # Compile graph
     app = workflow.compile()
     return app
